@@ -240,6 +240,8 @@ processXlate()
 	result="kill -USR2  $pids "
 	status=1
 }
+
+# start of app -----------------------------------------
 lastAction=""
 result=""
 
