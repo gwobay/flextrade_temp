@@ -1,0 +1,459 @@
+#!/bin/sh -f
+
+errexit()
+{
+	/bin/echo "\n$1"
+	exit 1
+}
+
+showhelp() {
+	/bin/echo "    W E L C O M E   T O   T E X T   B A S E D   F.I.X  M A N A G E R "
+	/bin/echo
+	/bin/echo
+	/bin/echo "                    1   :   To Close Connection"
+	/bin/echo "                    2   :   To Establish Connection"
+	/bin/echo "                    3   :   To Change HeartBeat"
+	/bin/echo "                    4   :   To Send HeartBeat"
+	/bin/echo "                    5   :   To Send Test Request"
+	/bin/echo "                    6   :   To Send Re-Send Request"
+	/bin/echo "                    7   :   To Disable Read"
+	/bin/echo "                    8   :   To Enable Read"
+	/bin/echo "                    9   :   To Change IP and Port"
+	/bin/echo "                    10  :   To Change Incoming Seq"
+	/bin/echo "                    11  :   To Change Outgoing Seq"
+	/bin/echo "                    12  :   To Refresh FixTags"
+	/bin/echo "                    13  :   To Refresh Xlate"
+	/bin/echo "                    14  :   To Purge/Print depth Book"
+	/bin/echo "                    15  :   To Exit"
+
+	if [ $1 ]
+	then
+		exit 1
+	fi
+}
+
+processRequest()
+{
+	action_code=$1
+	tokens=$2
+
+	if [ -f /tmp/fusr1 ]
+	then
+		if [ -w /tmp/fusr1 ] 
+		then
+			/bin/rm -f /tmp/fusr1
+		else
+			echo "File /tmp/fusr1 is not writable. Please make sure that user $LOGNAME has write permissions"
+			status=0
+			return
+		fi
+	fi
+	fix_io="dummy"
+	count=0
+
+	for tok in $tokens
+	do
+		count=`expr $count + 1 `
+		if [ $count -eq 1 ] 
+		then
+			fix_io="$tok"
+		else
+			echo "$action_code $tok" >> /tmp/fusr1
+		fi
+	done
+
+	if [ $fix_io == "o" ]
+	then
+		echo "Processing for Outgoing fix connection...."
+		pids=`ps -ef | grep $LOGNAME | grep -v flexlink | grep ' 'fix_flex | grep -v grep | awk ' { print $2 }'`
+	else
+		if [ $fix_io == "i" ]
+		then
+			echo "Processing for Incoming fix connection...."
+			pids=`ps -ef | grep $LOGNAME | grep flexlink | grep ' 'fix_flex |grep -v grep | awk ' { print $2 }'`
+		else
+			echo "invalid first argument. it should be either i: for incoming fix o: for outgoing fix connection"
+			status=0
+			return
+		fi
+	fi
+	echo "$pids"
+	if [ "e$pids" == "e" ]
+	then
+		return
+	fi
+	kill -USR1  $pids
+	result="kill -USR1  $pids "
+	status=1
+}
+
+processRequest1()
+{
+	action_code=$1
+	fix_io=$2
+	dest=$3
+	value=$4
+	port=$5
+
+	echo "Got ip $value"
+	echo "Got port $port"
+	if [ -f /tmp/fusr1 ]
+	then
+		if [ -w /tmp/fusr1 ] 
+		then
+			/bin/rm -f /tmp/fusr1
+		else
+			echo "File /tmp/fusr1 is not writable. Please make sure that user $LOGNAME has write permissions"
+			status=0
+			return
+		fi
+	fi
+	echo "$action_code $dest $value $port" >> /tmp/fusr1
+
+	if [ $fix_io == "o" ]
+	then
+		echo "Processing for Outgoing fix connection...."
+		pids=`ps -ef | grep $LOGNAME | grep -v flexlink | grep ' 'fix_flex | grep -v grep | awk ' { print $2 }'`
+	else
+		if [ $fix_io == "i" ]
+		then
+			echo "Processing for Incoming fix connection...."
+			pids=`ps -ef | grep $LOGNAME | grep flexlink | grep ' 'fix_flex |grep -v grep | awk ' { print $2 }'`
+		else
+			echo "invalid first argument. it should be either i: for incoming fix o: for outgoing fix connection"
+			status=0
+			return
+		fi
+	fi
+	echo "$pids"
+	if [ "e$pids" == "e" ]
+	then
+		return
+	fi
+	kill -USR1  $pids
+	result="kill -USR1  $pids "
+	status=1
+}
+
+processSig2()
+{
+	action_code=$1
+	value=$2
+
+	if [ -f /tmp/refresh_fix_usr2 ]
+	then
+		if [ -w /tmp/refresh_fix_usr2 ] 
+		then
+			/bin/rm -f /tmp/refresh_fix_usr2
+		else
+			echo "File /tmp/refresh_fix_usr2 is not writable. Please make sure that user $LOGNAME has write permissions"
+			status=0
+			return
+		fi
+	fi
+
+	if [ "e$action_code" == "eXLATE" ]
+	then
+		processXlate "$value"
+	else
+		if [ $value ]
+		then
+			echo "here ...$value"
+			if [ "e$value" == "ePURGE" ]
+			then
+				value=$action_code
+			elif [ "e$value" == "ePRINT" ]
+			then
+				value=$action_code
+			else
+				echo "Bad option for DEPTHBOOK, should be either PURGE or PRINT"
+				status=0
+				return
+			fi
+		else
+			value=$action_code
+		fi
+
+		echo "$action_code $value" >> /tmp/refresh_fix_usr2
+		echo "ProcessSig2 : $action_code $value" 
+
+		pids=`ps -ef | grep $LOGNAME | grep ' 'fix_flex | grep -v grep | awk ' { print $2 }'`
+		echo "$LOGNAME ProcessSig2 $pids"
+		if [ "e$pids" == "e" ]
+		then
+			return
+		fi
+		kill -USR2  $pids
+	result="kill -USR2  $pids "
+	fi
+	status=1
+}
+
+processXlate()
+{
+	tokens=$1
+
+	echo "got tokens = $tokens"
+	if [ -w /tmp/fusr1 ] 
+	then
+		/bin/rm -f /tmp/refresh_fix_usr2
+	else
+		echo "File /tmp/refresh_fix_usr2 is not writable. Please make sure that user $LOGNAME has write permissions"
+		status=0
+		return
+	fi
+	fix_io="dummy"
+	count=0
+
+	for tok in $tokens
+	do
+		count=`expr $count + 1 `
+		if [ $count -eq 1 ] 
+		then
+			fix_io="$tok"
+		else
+			echo "$action_code $tok" >> /tmp/refresh_fix_usr2
+		fi
+	done
+
+	if [ $fix_io == "o" ]
+	then
+		echo "Processing for Outgoing fix connection...."
+		pids=`ps -ef | grep $LOGNAME | grep -v flexlink | grep ' 'fix_flex | grep -v grep | awk ' { print $2 }'`
+	else
+		if [ $fix_io == "i" ]
+		then
+			echo "Processing for Incoming fix connection...."
+			pids=`ps -ef | grep $LOGNAME | grep flexlink | grep ' 'fix_flex |grep -v grep | awk ' { print $2 }'`
+		else
+			echo "invalid first argument. it should be either i: for incoming fix o: for outgoing fix connection"
+			status=0
+			return
+		fi
+	fi
+	echo "$pids"
+	if [ "e$pids" == "e" ]
+	then
+		return
+	fi
+	kill -USR2  $pids
+	result="kill -USR2  $pids "
+	status=1
+}
+lastAction=""
+result=""
+
+while [ 1 ]
+do
+showhelp
+echo
+echo
+echo "=================== last action : $lastAction $result "
+echo "Please enter the menu index to continue.."
+
+read opt
+if [ "e$opt" == "e" ]
+then
+	echo "No option selected. Try again."
+else
+lastAction=$opt
+result=""
+status=0
+case "$opt" in
+	1)
+			echo
+			echo " To close fix connection, please enter info as in the format below"
+			echo "{i,o} dest1 [dest2 ...]"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest "CLOSE_CONNEC" "$a"
+			fi
+			;;
+	2)
+			echo
+			echo " To establish fix connection, please enter info as in the format below"
+			echo "{i,o} dest1 [dest2 ...]"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest "ESTAB_CONNEC" "$a"
+			fi
+			;;
+	3)
+			echo
+			echo " To change HeartBeat interval, please enter info as in the format below"
+			echo "{i,o} dest1 secs"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest1 CHANGE_HBEAT_INT $a
+			fi
+			;;
+	4)
+			echo
+			echo " To send HeartBeat, please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 [dest2 ...]"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest "HEARTBEAT" "$a"
+			fi
+			;;
+	5)
+			echo
+			echo " To send Test Request, please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 [dest2 ...]"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest "TEST_REQ" "$a"
+			fi
+			;;
+	6)
+			echo
+			echo " To send Re-send Request, please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 end_Seq_Num"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest1  RESEND_REQ $a
+			fi
+			;;
+	7)
+			echo
+			echo " To disable Read for the fix connection(s), please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 [dest2 ...]"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest "DISABLE_READ" "$a"
+			fi
+			;;
+	8)
+			echo
+			echo " To enable Read for the fix connection(s), please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 [dest2 ...]"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest "ENABLE_READ" "$a"
+			fi
+			;;
+	9)
+			echo
+			echo " To change IP and Port for the fix connection, please enter info as in the format below"
+			echo " MAKE SURE that other side has all the previous messages on the new IP/port"
+			echo "Please enter: {i,o} dest1 ip port"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest1 CHANGE_IP $a
+			fi
+			;;
+	10)
+			echo
+			echo " To change Incoming Sequence for the fix connection, please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 next_incoming_sequence_number"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest1  RESETSEQ_IN $a
+			fi
+			;;
+	11)
+			echo
+			echo " To change Outgoing Sequence for the fix connection, please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 next_outgoing_sequence_number"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processRequest1 RESETSEQ_OUT $a
+			fi
+			;;
+	12)
+			processSig2 FIXTAG
+			;;
+	13)
+			echo
+			echo " To refresh xlate file for the fix connection(s), please enter info as in the format below"
+			echo "Please enter: {i,o} dest1 [dest2 ...]"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processSig2 "XLATE" "$a"
+			fi
+			;;
+	14)
+			echo
+			echo " To Refresh fixtags file , please enter info as in the format below"
+			echo "Please enter: {PURGE,PRINT}"
+			read a
+			if [ "e$a" == "e" ]
+			then
+				echo "No command to process "
+				status=0
+			else
+				processSig2 DEPTHBOOK $a
+			fi
+			;;
+	15)
+			echo
+			echo "Exiting from the text mode. Goodbye"
+			echo
+			exit
+			;;
+	*)
+			echo
+			echo " $opt is not a valid option. Please try again."
+			echo
+			status=0
+	esac
+	echo $status
+	if [ "$status" -eq "1" ]
+	then
+		echo "Done Processing the Request."
+	else
+		echo "Problem encountered while processing the request."
+	fi
+fi
+	echo
+	echo
+done
+echo "Exiting from the text based fix monitor"
